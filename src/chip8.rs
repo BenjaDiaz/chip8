@@ -66,8 +66,7 @@ impl Chip8 {
 
     pub fn cycle(&mut self) {
         println!("cycle()");
-        // FIXME: Maybe we dont need to store opcode in the struct
-        let opcode:u16 = (self.memory[self.pc] as u16) << 8 | self.memory[self.pc + 1] as u16;
+        let opcode = (self.memory[self.pc] as u16) << 8 | self.memory[self.pc + 1] as u16;
 
         match opcode & 0xF000 {
             // 0xANNN
