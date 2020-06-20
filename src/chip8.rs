@@ -129,4 +129,6 @@ impl Chip8 {
     }
 
     pub fn draw(&mut self) {}
+
+    pub fn set_keys(&mut self) {}
 }

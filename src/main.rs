@@ -9,6 +9,8 @@ fn main() {
         if chip8.should_draw() {
             chip8.draw()
         }
-        Chip8::cycle(&mut chip8)
+        chip8.cycle();
+
+        chip8.set_keys();
     }
 }
