@@ -19,12 +19,11 @@ const CHIP8_FONTSET: [u8; 80] =
     ];
 
 pub struct Chip8 {
-    opcode: u16,
     memory: [u8; 4096],
     /// CPU registers
     v: [u8; 16],
     /// Index register
-    i: u16,
+    i: usize,
     /// Program counter
     pc: usize,
     /// 2048 pixels graphics
@@ -51,7 +50,6 @@ impl Chip8 {
             memory[x] = CHIP8_FONTSET[x];
         }
         Chip8 {
-            opcode: 0,
             memory,
             v: [0; 16],
             i: 0,
@@ -68,43 +66,46 @@ impl Chip8 {
 
     pub fn cycle(&mut self) {
         println!("cycle()");
-        self.opcode = (self.memory[self.pc] as u16) << 8 | self.memory[self.pc + 1] as u16;
+        // FIXME: Maybe we dont need to store opcode in the struct
+        let opcode:u16 = (self.memory[self.pc] as u16) << 8 | self.memory[self.pc + 1] as u16;
 
-        match self.opcode & 0xF000 {
-            /// 0xANNN
-            /// Sets I to the address NNN.
+        match opcode & 0xF000 {
+            // 0xANNN
+            // Sets I to the address NNN.
             0xA000 => {
-                self.i = self.opcode & 0x0FFF;
+                self.i = (opcode & 0x0FFF) as usize;
                 self.pc += 2;
             }
-            /// 0x2NNN
-            /// Calls subroutine at NNN.
+            // 0x2NNN
+            // Calls subroutine at NNN.
             0x2000 => {
                 self.stack[self.sp] = self.pc as u16;
                 self.sp += 1;
-                self.pc = (self.opcode & 0x0FFF) as usize;
+                self.pc = (opcode & 0x0FFF) as usize;
             }
-            /// 0xDXYN
-            /// Draws a sprite at coordinate (VX, VY) that has a width of 8 pixels and a height of N pixels.
-            /// Each row of 8 pixels is read as bit-coded starting from memory location I; I value doesn’t change after the execution of this instruction.
-            /// As described above, VF is set to 1 if any screen pixels are flipped from set to unset when the sprite is drawn, and to 0 if that doesn’t happen.
+            // 0xDXYN
+            // Draws a sprite at coordinate (VX, VY) that has a width of 8 pixels and a height of N pixels.
+            // Each row of 8 pixels is read as bit-coded starting from memory location I; I value doesn’t change after the execution of this instruction.
+            // As described above, VF is set to 1 if any screen pixels are flipped from set to unset when the sprite is drawn, and to 0 if that doesn’t happen.
             0xD000 => {
-                let x = V[self.opcode & 0x0F00];
-                let y = V[self.opcode & 0x00F0];
-                let h = self.opcode & 0x000F;
-                let pixel;
+                let x = self.v[(opcode & 0x0F00) as usize];
+                let y = self.v[(opcode & 0x00F0) as usize];
+                let h = (opcode & 0x000F) as u8;
+                let mut pixel;
+                let mut gfx_pos;
 
-                V[0xF] = 0;
-                for yline in 0..h {
-                    pixel = self.memory[self.i + yline];
+                self.v[0xF] = 0;
+                for yline in 0..h{
+                    pixel = self.memory[self.i + yline as usize];
                     for xline in 0..8 {
                         if pixel & (0b10000000 >> xline) != 0 {
                             // Check if there is already a pixel drawn
-                            if self.gfx[x + xline + ((y + yline) * 64)] {
-                                V[0xF] = 1
+                            gfx_pos = (x + xline + ((y + yline) * 64)) as usize;
+                            if self.gfx[gfx_pos] == 1 {
+                                self.v[0xF] = 1
                             }
                             // Set the pixel value by using XOR
-                            self.gfx[x + xline + ((y + yline) * 64)] ^= 1;
+                            self.gfx[gfx_pos] ^= 1;
                         }
                     }
                 }
