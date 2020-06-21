@@ -2,14 +2,14 @@ use sdl2::render::WindowCanvas;
 use std::error::Error;
 use sdl2::pixels::Color;
 use sdl2::rect::Point;
+use sdl2::Sdl;
 
 pub struct DisplayDriver {
     canvas: WindowCanvas
 }
 
 impl DisplayDriver {
-    pub fn new() -> Result<DisplayDriver, Box<dyn Error>> {
-        let sdl_context = sdl2::init()?;
+    pub fn new(sdl_context: &Sdl) -> Result<DisplayDriver, Box<dyn Error>> {
         let video_subsystem = sdl_context.video()?;
 
         let window = video_subsystem.window("chip8", 64, 32)

@@ -76,7 +76,7 @@ impl Chip8 {
         let opcode = (self.memory[self.pc] as u16) << 8 | self.memory[self.pc + 1] as u16;
 
         match opcode & 0xF000 {
-            // 0x0000
+            // 0x0
             0x0000 => {
                 match opcode {
                     // 0x00E0
@@ -194,6 +194,19 @@ impl Chip8 {
                 self.draw_flag = true;
                 self.pc += 2;
             }
+            // 0xF
+            0xF000 => {
+                match opcode & 0xF0FF {
+                    // 0xFX1E
+                    // Adds VX to I. VF is not affected.
+                    0xF01E => {
+                        let x = ((opcode & 0x0F00) >> 8) as usize;
+                        self.i += self.v[x] as usize;
+                        self.pc += 2;
+                    }
+                    _ => { println!("Unknown opcode 0x{:02x}", opcode) }
+                }
+            }
             _ => { println!("Unknown opcode 0x{:02x}", opcode) }
         }
         if self.delay_timer > 0 {
@@ -219,5 +232,7 @@ impl Chip8 {
         self.draw_flag = false;
     }
 
-    pub fn set_keys(&mut self) {}
+    pub fn set_keys(&mut self, key: usize, is_pressed: bool) {
+        self.keypad[key] = if is_pressed { 1 } else { 0 };
+    }
 }
