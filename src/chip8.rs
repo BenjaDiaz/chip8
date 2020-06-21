@@ -22,6 +22,7 @@ const CHIP8_FONTSET: [u8; 80] =
     ];
 
 pub struct Chip8 {
+    /// 8bit memory
     memory: [u8; 4096],
     /// CPU registers
     v: [u8; 16],
@@ -43,7 +44,7 @@ pub struct Chip8 {
     keypad: [u8; 16],
     /// Defines the need to update the screen. Set by opcode 0x00E0 (clear) or 0xDXYN (draw)
     pub draw_flag: bool,
-    /// Canvas to display screen
+    /// Responsible for handling window and drawing pixels defined in gfx
     display: DisplayDriver,
 }
 
@@ -87,10 +88,10 @@ impl Chip8 {
                     // 0x00EE
                     // Returns from a subroutine.
                     0x00EE => {
-                        self.pc = self.stack[self.sp];
                         self.sp -= 1;
+                        self.pc = self.stack[self.sp];
                     }
-                    _ => { println!("Unknown opcode {}", opcode) }
+                    _ => { println!("Unknown opcode 0x{:02x}", opcode) }
                 }
             }
             // 0x1NNN
@@ -110,11 +111,48 @@ impl Chip8 {
             // 0x3XNN
             // Skips the next instruction if VX equals NN. (Usually the next instruction is a jump to skip a code block).
             0x3000 => {
-                let x = (opcode & 0x0F00) as usize;
+                let x = ((opcode & 0x0F00) >> 8) as usize;
                 let nn = opcode & 0x00FF;
                 if self.v[x] == nn as u8 {
                     self.pc += 2;
                 }
+                self.pc += 2;
+            }
+            // 0x4XNN
+            // Skips the next instruction if VX doesn't equal NN. (Usually the next instruction is a jump to skip a code block)
+            0x4000 => {
+                let x = ((opcode & 0x0F00) >> 8) as usize;
+                let nn = opcode & 0x00FF;
+                if self.v[x] != nn as u8 {
+                    self.pc += 2;
+                }
+                self.pc += 2;
+            }
+
+            // 0x5XY0
+            // Skips the next instruction if VX equals VY. (Usually the next instruction is a jump to skip a code block)
+            0x5000 => {
+                let x = ((opcode & 0x0F00) >> 8) as usize;
+                let y = ((opcode & 0x00F0) >> 4) as usize;
+                if self.v[x] == self.v[y] {
+                    self.pc += 2;
+                }
+                self.pc += 2;
+            }
+            // 0x6XNN
+            // Sets VX to NN.
+            0x6000 => {
+                let x = ((opcode & 0x0F00) >> 8) as usize;
+                let nn = (opcode & 0x00FF) as u8;
+                self.v[x] = nn;
+                self.pc += 2;
+            }
+            // 0x7XNN
+            // Adds NN to VX. (Carry flag is not changed)
+            0x7000 => {
+                let x = ((opcode & 0x0F00) >> 8) as usize;
+                let nn = (opcode & 0x00FF) as u8;
+                self.v[x] += nn;
                 self.pc += 2;
             }
 
@@ -130,8 +168,10 @@ impl Chip8 {
             // Each row of 8 pixels is read as bit-coded starting from memory location I; I value doesn’t change after the execution of this instruction.
             // As described above, VF is set to 1 if any screen pixels are flipped from set to unset when the sprite is drawn, and to 0 if that doesn’t happen.
             0xD000 => {
-                let x = self.v[(opcode & 0x0F00) as usize];
-                let y = self.v[(opcode & 0x00F0) as usize];
+                let x = ((opcode & 0x0F00) >> 8) as usize;
+                let y = ((opcode & 0x00F0) >> 4) as usize;
+                let vx = self.v[((opcode & 0x0F00) >> 8) as usize];
+                let vy = self.v[((opcode & 0x00F0) >> 4) as usize];
                 let h = (opcode & 0x000F) as u8;
                 let mut pixel;
                 let mut gfx_pos;
@@ -142,7 +182,7 @@ impl Chip8 {
                     for xline in 0..8 {
                         if pixel & (0b10000000 >> xline) != 0 {
                             // Check if there is already a pixel drawn
-                            gfx_pos = (x + xline + ((y + yline) * 64)) as usize;
+                            gfx_pos = ((vx + xline) as u32 + ((vy + yline) as u32 * 64)) as usize;
                             if self.gfx[gfx_pos] == 1 {
                                 self.v[0xF] = 1
                             }
@@ -154,7 +194,7 @@ impl Chip8 {
                 self.draw_flag = true;
                 self.pc += 2;
             }
-            _ => { println!("Unknown opcode {}", opcode) }
+            _ => { println!("Unknown opcode 0x{:02x}", opcode) }
         }
         if self.delay_timer > 0 {
             self.delay_timer -= 1;
