@@ -7,6 +7,10 @@ WIP
 ## Requirements
 
     sudo apt-get install libsdl2-dev
+    
+## Use
+
+    cargo run
 
 ## References
 
