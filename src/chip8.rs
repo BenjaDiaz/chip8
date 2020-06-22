@@ -82,6 +82,7 @@ impl Chip8 {
                     // 0x00E0
                     // Clears the screen
                     0x00E0 => {
+                        for elem in self.gfx.iter_mut() { *elem = 0; }
                         self.display.clear();
                         self.pc += 2;
                     }
@@ -89,7 +90,7 @@ impl Chip8 {
                     // Returns from a subroutine.
                     0x00EE => {
                         self.sp -= 1;
-                        self.pc = self.stack[self.sp];
+                        self.pc = self.stack[self.sp] + 2;
                     }
                     _ => { println!("Unknown opcode 0x{:02x}", opcode) }
                 }
@@ -152,8 +153,65 @@ impl Chip8 {
             0x7000 => {
                 let x = ((opcode & 0x0F00) >> 8) as usize;
                 let nn = (opcode & 0x00FF) as u8;
-                self.v[x] += nn;
+                // FIXME: Search for another way to manage overflow
+                let new_vx = self.v[x] as u16 + nn as u16;
+                self.v[x] = if new_vx > 0xFF { (new_vx - 0xFF) as u8 } else { self.v[x] + nn } as u8;
                 self.pc += 2;
+            }
+            // 0x8
+            0x8000 => {
+                let x = ((opcode & 0x0F00) >> 8) as usize;
+                let y = ((opcode & 0x00F0) >> 4) as usize;
+                match opcode & 0xF00F {
+                    // 0x8XY0
+                    // Sets VX to the value of VY.
+                    0x8000 => {
+                        self.v[x] = self.v[y];
+                        self.pc += 2;
+                    }
+                    // 0x8XY2
+                    // Sets VX to VX and VY. (Bitwise AND operation)
+                    0x8002 => {
+                        self.v[x] = self.v[x] & self.v[y];
+                        self.pc += 2;
+                    }
+                    // 0x8XY3
+                    // Sets VX to VX xor VY.
+                    0x8003 => {
+                        self.v[x] = self.v[x] ^ self.v[y];
+                        self.pc += 2;
+                    }
+                    // 0x8XY4
+                    // Adds VY to VX. VF is set to 1 when there's a carry, and to 0 when there isn't.
+                    0x8004 => {
+                        self.v[x] = match self.v[x].checked_add(self.v[y]) {
+                            Some(result) => {
+                                self.v[0xF] = 0;
+                                result
+                            }
+                            None => {
+                                self.v[0xF] = 1;
+                                (self.v[x] as usize + self.v[y] as usize - 0xFF) as u8
+                            }
+                        };
+                        self.pc += 2;
+                    }
+                    // 0x8XY5
+                    // VY is subtracted from VX. VF is set to 0 when there's a borrow, and 1 when there isn't.
+                    0x8005 => {
+                        self.v[0xF] = if self.v[x] > self.v[y] { 1 } else { 0 };
+                        self.v[x] = self.v[x].wrapping_sub(self.v[y]);
+                        self.pc += 2;
+                    }
+                    // 0x8XY6
+                    // Stores the least significant bit of VX in VF and then shifts VX to the right by 1.
+                    0x8006 => {
+                        self.v[0xF] = self.v[x] & 1;
+                        self.v[x] >>= 1;
+                        self.pc += 2;
+                    }
+                    _ => { println!("Unknown opcode 0x{:02x}", opcode) }
+                }
             }
 
             // 0xANNN
@@ -168,40 +226,88 @@ impl Chip8 {
             // Each row of 8 pixels is read as bit-coded starting from memory location I; I value doesn’t change after the execution of this instruction.
             // As described above, VF is set to 1 if any screen pixels are flipped from set to unset when the sprite is drawn, and to 0 if that doesn’t happen.
             0xD000 => {
-                let x = ((opcode & 0x0F00) >> 8) as usize;
-                let y = ((opcode & 0x00F0) >> 4) as usize;
                 let vx = self.v[((opcode & 0x0F00) >> 8) as usize];
                 let vy = self.v[((opcode & 0x00F0) >> 4) as usize];
-                let h = (opcode & 0x000F) as u8;
-                let mut pixel;
+                let n = (opcode & 0x000F) as u8;
+                let mut sprite_row;
                 let mut gfx_pos;
 
                 self.v[0xF] = 0;
-                for yline in 0..h {
-                    pixel = self.memory[self.i + yline as usize];
+                for yline in 0..n {
+                    sprite_row = self.memory[self.i + yline as usize];
                     for xline in 0..8 {
-                        if pixel & (0b10000000 >> xline) != 0 {
-                            // Check if there is already a pixel drawn
-                            gfx_pos = ((vx + xline) as u32 + ((vy + yline) as u32 * 64)) as usize;
-                            if self.gfx[gfx_pos] == 1 {
-                                self.v[0xF] = 1
-                            }
-                            // Set the pixel value by using XOR
-                            self.gfx[gfx_pos] ^= 1;
-                        }
+                        let pixel = (sprite_row >> (7 - xline)) & 1;
+                        // TODO: Handle overflow. Continue drawing on other side.
+                        gfx_pos = ((vx as u32 + xline as u32) + ((vy as u32 + yline as u32) * 64)) as usize;
+                        self.v[0xF] |= pixel & self.gfx[gfx_pos];
+                        // Set the pixel value by using XOR
+                        self.gfx[gfx_pos] ^= pixel;
                     }
                 }
                 self.draw_flag = true;
                 self.pc += 2;
             }
+            // 0xE
+            0xE000 => {
+                match opcode & 0xF0FF {
+                    // 0xEX9E
+                    // Skips the next instruction if the key stored in VX is pressed. (Usually the next instruction is a jump to skip a code block)
+                    0xE09E => {
+                        let x = ((opcode & 0x0F00) >> 8) as usize;
+                        if self.keypad[self.v[x] as usize] != 0 {
+                            self.pc += 2;
+                        }
+                        self.pc += 2;
+                    }
+                    // 0xEXA1
+                    // Skips the next instruction if the key stored in VX isn't pressed. (Usually the next instruction is a jump to skip a code block)
+                    0xE0A1 => {
+                        let x = ((opcode & 0x0F00) >> 8) as usize;
+                        if self.keypad[self.v[x] as usize] == 0 {
+                            self.pc += 2;
+                        }
+                        self.pc += 2;
+                    }
+                    _ => println!("Unknown opcode 0x{:02x}", opcode)
+                }
+            }
             // 0xF
             0xF000 => {
+                let x = ((opcode & 0x0F00) >> 8) as usize;
                 match opcode & 0xF0FF {
+                    // 0xFX07
+                    // Sets VX to the value of the delay timer.
+                    0xF007 => {
+                        self.v[x] = self.delay_timer;
+                        self.pc += 2;
+                    }
                     // 0xFX1E
                     // Adds VX to I. VF is not affected.
                     0xF01E => {
-                        let x = ((opcode & 0x0F00) >> 8) as usize;
                         self.i += self.v[x] as usize;
+                        self.pc += 2;
+                    }
+                    // 0xFX15
+                    // Sets the delay timer to VX.
+                    0xF015 => {
+                        self.delay_timer = self.v[x];
+                        self.pc += 2;
+                    }
+                    // 0xF018
+                    // Sets the sound timer to VX.
+                    0xF018 => {
+                        self.sound_timer = self.v[x];
+                        self.pc += 2;
+                    }
+                    // 0xFX65
+                    // Fills V0 to VX (including VX) with values from memory starting at address I.
+                    // The offset from I is increased by 1 for each value written, but I itself is left unmodified.
+                    0xF065 => {
+                        let mut offset = 0;
+                        for j in 0..x + 1 {
+                            self.v[j] = (self.memory[self.i + offset]) as u8;
+                            offset += 1;
+                        }
                         self.pc += 2;
                     }
                     _ => { println!("Unknown opcode 0x{:02x}", opcode) }

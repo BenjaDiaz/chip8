@@ -7,8 +7,6 @@ mod drivers;
 
 use drivers::DisplayDriver;
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 
@@ -28,7 +26,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                     break 'running;
                 }
                 Event::KeyDown { keycode: Some(Keycode::Num1), .. } => {
-                    chip8.set_keys(0x1, true);
+                    chip8.set_keys(0x5, true);
+                }
+                Event::KeyUp { keycode: Some(Keycode::Num1), .. } => {
+                    chip8.set_keys(0x5, false);
                 }
                 _ => {}
             }
@@ -42,7 +43,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         // chip8.set_keys();
 
         // Execute 60 opcodes in one second
-        let ten_millis = time::Duration::from_millis(1000 / 60);
+        let ten_millis = time::Duration::from_millis(100 / 60);
 
         thread::sleep(ten_millis)
     }

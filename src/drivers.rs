@@ -1,7 +1,7 @@
 use sdl2::render::WindowCanvas;
 use std::error::Error;
 use sdl2::pixels::Color;
-use sdl2::rect::Point;
+use sdl2::rect::{Point, Rect};
 use sdl2::Sdl;
 
 const CHIP8_WIDTH: u32 = 64;
@@ -23,7 +23,7 @@ impl DisplayDriver {
 
         let mut canvas = window.into_canvas().build()
             .expect("could not make a canvas");
-
+        canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
         canvas.present();
         Ok(DisplayDriver {
@@ -32,27 +32,27 @@ impl DisplayDriver {
     }
 
     pub fn draw(&mut self, gfx: [u8; 64 * 32]) {
-        // TODO: Traverse gfx and draw pixels
-        self.canvas.set_draw_color(Color::RGB(255, 255, 255));
-        let mut x:i32;
-        let mut y:i32;
-        let mut p;
+        let mut x: i32;
+        let mut y: i32;
+        let mut r;
         for (i, elem) in gfx.iter().enumerate() {
             if *elem == 1 {
-                x = ((i % CHIP8_WIDTH as usize) * CHIP8_SCALE as usize) as i32;
-                y = ((i / CHIP8_WIDTH as usize) * CHIP8_SCALE as usize) as i32;
-                for j in 0..CHIP8_SCALE {
-                    for k in 0..CHIP8_SCALE {
-                        p = Point::new((x + j as i32), (y + k as i32));
-                        self.canvas.draw_point(p).expect("could not draw point");
-                    }
-                }
+                self.canvas.set_draw_color(Color::RGB(255, 255, 255));
+            } else {
+                self.canvas.set_draw_color(Color::RGB(0, 0, 0));
             }
+            x = ((i % CHIP8_WIDTH as usize) * CHIP8_SCALE as usize) as i32;
+            y = ((i / CHIP8_WIDTH as usize) * CHIP8_SCALE as usize) as i32;
+
+            r = Rect::new(x, y, CHIP8_SCALE, CHIP8_SCALE);
+            self.canvas.fill_rect(r).expect("could not draw rect");
         }
         self.canvas.present();
     }
 
     pub fn clear(&mut self) {
+        self.canvas.set_draw_color(Color::RGB(0, 0, 0));
         self.canvas.clear();
+        self.canvas.present();
     }
 }
