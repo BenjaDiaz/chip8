@@ -83,7 +83,7 @@ impl Chip8 {
                     // Clears the screen
                     0x00E0 => {
                         for elem in self.gfx.iter_mut() { *elem = 0; }
-                        self.display.clear();
+                        self.draw_flag = true;
                         self.pc += 2;
                     }
                     // 0x00EE
@@ -153,9 +153,9 @@ impl Chip8 {
             0x7000 => {
                 let x = ((opcode & 0x0F00) >> 8) as usize;
                 let nn = (opcode & 0x00FF) as u8;
-                // FIXME: Search for another way to manage overflow
-                let new_vx = self.v[x] as u16 + nn as u16;
-                self.v[x] = if new_vx > 0xFF { (new_vx - 0xFF) as u8 } else { self.v[x] + nn } as u8;
+                let vx = self.v[x] as u16;
+                let result = vx + nn as u16;
+                self.v[x] = result as u8;
                 self.pc += 2;
             }
             // 0x8
@@ -184,16 +184,11 @@ impl Chip8 {
                     // 0x8XY4
                     // Adds VY to VX. VF is set to 1 when there's a carry, and to 0 when there isn't.
                     0x8004 => {
-                        self.v[x] = match self.v[x].checked_add(self.v[y]) {
-                            Some(result) => {
-                                self.v[0xF] = 0;
-                                result
-                            }
-                            None => {
-                                self.v[0xF] = 1;
-                                (self.v[x] as usize + self.v[y] as usize - 0xFF) as u8
-                            }
-                        };
+                        let vx = self.v[x] as u16;
+                        let vy = self.v[y] as u16;
+                        let result = vx + vy;
+                        self.v[x] = result as u8;
+                        self.v[0xF] = if result > 0xFF { 1 } else { 0 };
                         self.pc += 2;
                     }
                     // 0x8XY5
@@ -233,6 +228,7 @@ impl Chip8 {
                 let mut gfx_pos;
 
                 self.v[0xF] = 0;
+
                 for yline in 0..n {
                     sprite_row = self.memory[self.i + yline as usize];
                     for xline in 0..8 {
@@ -303,10 +299,8 @@ impl Chip8 {
                     // Fills V0 to VX (including VX) with values from memory starting at address I.
                     // The offset from I is increased by 1 for each value written, but I itself is left unmodified.
                     0xF065 => {
-                        let mut offset = 0;
                         for j in 0..x + 1 {
-                            self.v[j] = (self.memory[self.i + offset]) as u8;
-                            offset += 1;
+                            self.v[j] = (self.memory[self.i + j]) as u8;
                         }
                         self.pc += 2;
                     }

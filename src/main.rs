@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut chip8 = Chip8::new(display_driver);
     let rom_path = PathBuf::from("roms/Space Invaders [David Winter].ch8");
     chip8.load(rom_path);
-
+    let sleep_duration = time::Duration::from_millis(2);
     let mut event_pump = sdl_context.event_pump()?;
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -40,12 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             chip8.draw()
         }
 
-        // chip8.set_keys();
-
-        // Execute 60 opcodes in one second
-        let ten_millis = time::Duration::from_millis(100 / 60);
-
-        thread::sleep(ten_millis)
+        thread::sleep(sleep_duration)
     }
     Ok(())
 }

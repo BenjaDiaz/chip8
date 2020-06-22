@@ -32,6 +32,7 @@ impl DisplayDriver {
     }
 
     pub fn draw(&mut self, gfx: [u8; 64 * 32]) {
+        self.canvas.clear();
         let mut x: i32;
         let mut y: i32;
         let mut r;
@@ -47,12 +48,6 @@ impl DisplayDriver {
             r = Rect::new(x, y, CHIP8_SCALE, CHIP8_SCALE);
             self.canvas.fill_rect(r).expect("could not draw rect");
         }
-        self.canvas.present();
-    }
-
-    pub fn clear(&mut self) {
-        self.canvas.set_draw_color(Color::RGB(0, 0, 0));
-        self.canvas.clear();
         self.canvas.present();
     }
 }
